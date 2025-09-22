@@ -8,9 +8,11 @@ WORKDIR /app
 # Stelle sicher, dass test.py im selben Verzeichnis wie die Dockerfile liegt
 COPY test.py .
 
-# Installiere PyTorch explizit für CPU zuerst.
-# Die Version 2.8.0 wurde in deinen Logs verwendet. Das "+cpu" und die --index-url
-# stellen sicher, dass nur die CPU-Version installiert wird und keine CUDA-Abhängigkeiten gezogen werden.
+# Zuerst typing-extensions aus dem Standard-PyPI installieren, um Abhängigkeitskonflikte zu vermeiden
+RUN pip install --no-cache-dir typing-extensions>=4.10.0
+
+# Installiere PyTorch explizit für CPU.
+# Da typing-extensions bereits installiert ist, sollte torch es jetzt erkennen und keine Probleme haben.
 RUN pip install --no-cache-dir \
     torch==2.8.0+cpu --index-url https://download.pytorch.org/whl/cpu
 
