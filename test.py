@@ -4,12 +4,13 @@ import torch
 import time
 from tqdm.auto import tqdm
 import numpy as np
+import os # Importiere os für Pfadoperationen
 
 def generate_lofi_music_long(
     total_duration_seconds: int = 225,  # 3 Minuten 45 Sekunden
-    segment_duration_seconds: int = 28, # Max. 30 Sekunden, hier etwas Puffer
+    segment_duration_seconds: int = 28, # Max. ~29-30s. Hier etwas Puffer für Stabilität
     prompt: str = "lo-fi music with a soothing melody, chill vibes, relaxed atmosphere, calm, gentle",
-    output_filename: str = "lofi_music_3m45s.wav"
+    output_filename: str = "/app/output/lofi_music_3m45s.wav" # Angepasster Pfad für Docker-Volume
 ):
     """
     Generiert einen längeren Lo-Fi-Musiktrack, indem er ihn in Segmente aufteilt und zusammenfügt,
@@ -21,16 +22,25 @@ def generate_lofi_music_long(
         prompt (str): Die Textbeschreibung für die zu generierende Musik.
         output_filename (str): Der Dateiname für die Ausgabe-WAV-Datei.
     """
-    if segment_duration_seconds > 29: # Sicherstellen, dass wir unter 30 Sekunden bleiben
-        print("Warnung: segment_duration_seconds sollte 29 Sekunden nicht überschreiten, um 'IndexError' zu vermeiden. Setze auf 28 Sekunden.")
-        segment_duration_seconds = 28
+    # Sicherheitshalber: Begrenze die Segmentdauer
+    if segment_duration_seconds > 29:
+        print(f"Warnung: segment_duration_seconds ({segment_duration_seconds}s) ist zu lang für musicgen-small.")
+        print("Setze segment_duration_seconds auf 29 Sekunden.")
+        segment_duration_seconds = 29
+
+    # Stelle sicher, dass das Ausgabeverzeichnis existiert
+    output_dir = os.path.dirname(output_filename)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+        print(f"Erstelle Ausgabeverzeichnis: {output_dir}")
+
 
     # Definiere die Hauptphasen des Prozesses
     phases = [
         "Modell laden",
         "Gerät initialisieren",
         "Prompt verarbeiten",
-        "Audio-Segmente generieren", # Dieser Schritt wird nun in Schleifen ausgeführt
+        "Audio-Segmente generieren",
         "Audio-Segmente zusammenfügen und speichern"
     ]
     total_phases = len(phases)
@@ -59,7 +69,7 @@ def generate_lofi_music_long(
     print(f"\nMusikgenerierung gestartet für:")
     print(f"  Prompt: '{prompt}'")
     print(f"  Gewünschte Gesamtdauer: {total_duration_seconds // 60}:{(total_duration_seconds % 60):02d} Minuten")
-    print(f"  Segmentlänge: {segment_duration_seconds} Sekunden pro Generierung")
+    print(f"  Segmentlänge pro Generierung: {segment_duration_seconds} Sekunden")
 
     # MusicGen generiert 50 auto-regressive Schritte pro Sekunde Audio.
     tokens_per_second = 50
@@ -78,6 +88,7 @@ def generate_lofi_music_long(
     phase_bar.update(1)
 
     all_audio_segments = []
+    # Berechne die Anzahl der benötigten Segmente
     num_segments = int(np.ceil(total_duration_seconds / segment_duration_seconds))
     sampling_rate = model.config.audio_encoder.sampling_rate
 
@@ -107,7 +118,7 @@ def generate_lofi_music_long(
         
         end_time_segment = time.time()
         segment_duration = end_time_segment - start_time_segment
-        # print(f"    Segment {i+1}/{num_segments} generiert in {segment_duration:.2f} Sekunden.") # Kann optional ausgegeben werden
+        print(f"    Segment {i+1}/{num_segments} generiert in {segment_duration:.2f} Sekunden.")
         segment_progress_bar.update(1)
     
     segment_progress_bar.close()
@@ -125,9 +136,7 @@ def generate_lofi_music_long(
     if len(final_audio) > desired_samples:
         final_audio = final_audio[:desired_samples]
     elif len(final_audio) < desired_samples:
-        # Dies sollte nicht passieren, wenn die Berechnungen stimmen, aber zur Sicherheit
         print(f"Warnung: Generiertes Audio ist kürzer als gewünscht. Erwartet: {desired_samples} Samples, Tatsächlich: {len(final_audio)} Samples.")
-
 
     # Speichere die generierte Musik als WAV-Datei
     print(f"Speichere die zusammengefügte Musik als '{output_filename}' mit einer Abtastrate von {sampling_rate} Hz.")
